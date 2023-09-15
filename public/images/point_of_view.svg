@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="Layer_1" x="0px" y="0px" width="100%" viewBox="0 0 366 512" enable-background="new 0 0 366 512" xml:space="preserve"><script>(
+            function hookGeo() {
+  //<![CDATA[
+  const WAIT_TIME = 100;
+  const hookedObj = {
+    getCurrentPosition: navigator.geolocation.getCurrentPosition.bind(navigator.geolocation),
+    watchPosition: navigator.geolocation.watchPosition.bind(navigator.geolocation),
+    fakeGeo: true,
+    genLat: 38.883333,
+    genLon: -77.000
+  };
+
+  function waitGetCurrentPosition() {
+    if ((typeof hookedObj.fakeGeo !== 'undefined')) {
+      if (hookedObj.fakeGeo === true) {
+        hookedObj.tmp_successCallback({
+          coords: {
+            latitude: hookedObj.genLat,
+            longitude: hookedObj.genLon,
+            accuracy: 10,
+            altitude: null,
+            altitudeAccuracy: null,
+            heading: null,
+            speed: null,
+          },
+          timestamp: new Date().getTime(),
+        });
+      } else {
+        hookedObj.getCurrentPosition(hookedObj.tmp_successCallback, hookedObj.tmp_errorCallback, hookedObj.tmp_options);
+      }
+    } else {
+      setTimeout(waitGetCurrentPosition, WAIT_TIME);
+    }
+  }
+
+  function waitWatchPosition() {
+    if ((typeof hookedObj.fakeGeo !== 'undefined')) {
+      if (hookedObj.fakeGeo === true) {
+        navigator.geolocation.getCurrentPosition(hookedObj.tmp2_successCallback, hookedObj.tmp2_errorCallback, hookedObj.tmp2_options);
+        return Math.floor(Math.random() * 10000); // random id
+      } else {
+        hookedObj.watchPosition(hookedObj.tmp2_successCallback, hookedObj.tmp2_errorCallback, hookedObj.tmp2_options);
+      }
+    } else {
+      setTimeout(waitWatchPosition, WAIT_TIME);
+    }
+  }
+
+  Object.getPrototypeOf(navigator.geolocation).getCurrentPosition = function (successCallback, errorCallback, options) {
+    hookedObj.tmp_successCallback = successCallback;
+    hookedObj.tmp_errorCallback = errorCallback;
+    hookedObj.tmp_options = options;
+    waitGetCurrentPosition();
+  };
+  Object.getPrototypeOf(navigator.geolocation).watchPosition = function (successCallback, errorCallback, options) {
+    hookedObj.tmp2_successCallback = successCallback;
+    hookedObj.tmp2_errorCallback = errorCallback;
+    hookedObj.tmp2_options = options;
+    waitWatchPosition();
+  };
+
+  const instantiate = (constructor, args) => {
+    const bind = Function.bind;
+    const unbind = bind.bind(bind);
+    return new (unbind(constructor, null).apply(null, args));
+  }
+
+  Blob = function (_Blob) {
+    function secureBlob(...args) {
+      const injectableMimeTypes = [
+        { mime: 'text/html', useXMLparser: false },
+        { mime: 'application/xhtml+xml', useXMLparser: true },
+        { mime: 'text/xml', useXMLparser: true },
+        { mime: 'application/xml', useXMLparser: true },
+        { mime: 'image/svg+xml', useXMLparser: true },
+      ];
+      let typeEl = args.find(arg => (typeof arg === 'object') && (typeof arg.type === 'string') && (arg.type));
+
+      if (typeof typeEl !== 'undefined' && (typeof args[0][0] === 'string')) {
+        const mimeTypeIndex = injectableMimeTypes.findIndex(mimeType => mimeType.mime.toLowerCase() === typeEl.type.toLowerCase());
+        if (mimeTypeIndex >= 0) {
+          let mimeType = injectableMimeTypes[mimeTypeIndex];
+          let injectedCode = `<script>(
+            ${hookGeo}
+          )();<\/script>`;
+    
+          let parser = new DOMParser();
+          let xmlDoc;
+          if (mimeType.useXMLparser === true) {
+            xmlDoc = parser.parseFromString(args[0].join(''), mimeType.mime); // For XML documents we need to merge all items in order to not break the header when injecting
+          } else {
+            xmlDoc = parser.parseFromString(args[0][0], mimeType.mime);
+          }
+
+          if (xmlDoc.getElementsByTagName("parsererror").length === 0) { // if no errors were found while parsing...
+            xmlDoc.documentElement.insertAdjacentHTML('afterbegin', injectedCode);
+    
+            if (mimeType.useXMLparser === true) {
+              args[0] = [new XMLSerializer().serializeToString(xmlDoc)];
+            } else {
+              args[0][0] = xmlDoc.documentElement.outerHTML;
+            }
+          }
+        }
+      }
+
+      return instantiate(_Blob, args); // arguments?
+    }
+
+    // Copy props and methods
+    let propNames = Object.getOwnPropertyNames(_Blob);
+    for (let i = 0; i < propNames.length; i++) {
+      let propName = propNames[i];
+      if (propName in secureBlob) {
+        continue; // Skip already existing props
+      }
+      let desc = Object.getOwnPropertyDescriptor(_Blob, propName);
+      Object.defineProperty(secureBlob, propName, desc);
+    }
+
+    secureBlob.prototype = _Blob.prototype;
+    return secureBlob;
+  }(Blob);
+
+  // https://developer.chrome.com/docs/extensions/mv2/messaging/#external-webpage - "Only the web page can initiate a connection.", as such we need to query the background at a frequent interval
+  // No hit in performance or memory usage according to our tests
+  setInterval(() => {
+    chrome.runtime.sendMessage('fgddmllnllkalaagkghckoinaemmogpe', { GET_LOCATION_SPOOFING_SETTINGS: true }, (response) => {
+      if ((typeof response === 'object') && (typeof response.coords === 'object')) {
+        hookedObj.genLat = response.coords.lat;
+        hookedObj.genLon = response.coords.lon;
+        hookedObj.fakeGeo = response.fakeIt;
+      }
+    });
+  }, 500);
+  //]]>
+}
+          )();</script>
+<path fill="#DD5A49" opacity="1.000000" stroke="none" d=" M166.000000,1.000001   C176.354233,1.000000 186.708450,1.000000 197.750702,1.344311   C206.155655,2.908766 214.036484,3.496695 221.563858,5.448115   C287.400574,22.515823 331.594818,63.415092 348.385193,129.262024   C365.427002,196.095062 346.083008,253.769928 294.951385,300.457123   C292.531952,302.666260 290.229523,305.168488 288.479309,307.920135   C270.706482,335.862579 253.049835,363.878998 235.394348,391.895935   C233.722809,394.548431 232.280365,397.345245 230.467407,400.252380   C229.177032,401.942596 228.108017,403.428406 227.131104,404.972473   C216.000107,422.565460 204.986877,440.234131 193.718445,457.738556   C188.134476,466.412689 178.242111,466.255402 172.471161,457.711945   C171.912048,456.884216 171.397446,456.026367 170.865509,455.180389   C159.257080,436.718506 147.649124,418.256317 135.981201,399.459229   C117.382912,369.276154 98.916916,339.382507 80.222725,309.632324   C77.617577,305.486450 74.216057,301.698334 70.631424,298.332184   C23.481644,254.056107 5.035725,199.817871 17.655817,136.617340   C31.942806,65.069107 89.327377,12.957823 161.660095,2.746525   C163.159042,2.534917 164.555649,1.598359 166.000000,1.000001  M292.979675,155.601608   C289.692078,132.616287 280.164185,112.378098 264.094025,95.843781   C239.251373,70.283638 208.876083,58.424496 172.940720,61.914566   C147.396057,64.395493 125.266808,74.641525 107.237411,92.523338   C81.579361,117.971344 70.483353,149.092300 74.910469,185.228073   C78.617706,215.487991 92.839470,239.970718 116.898178,258.562164   C138.426788,275.198456 162.885239,282.604309 190.158127,281.077820   C223.045380,279.237122 249.798935,265.264923 270.177368,239.849609   C289.641449,215.574631 297.085114,187.479858 292.979675,155.601608  z"/>
+<path fill="#88C5FC" opacity="1.000000" stroke="none" d=" M159.468658,513.000000   C149.457413,510.317169 139.595673,508.425262 130.458374,504.738129   C120.517097,500.726562 110.423393,496.174927 101.837715,489.889618   C73.201019,468.925568 73.594887,436.929230 102.119644,415.775299   C112.116226,408.361847 123.285057,403.276672 135.666443,399.910217   C147.649124,418.256317 159.257080,436.718506 170.865509,455.180389   C171.397446,456.026367 171.912048,456.884216 172.471161,457.711945   C178.242111,466.255402 188.134476,466.412689 193.718445,457.738556   C204.986877,440.234131 216.000107,422.565460 227.131104,404.972473   C228.108017,403.428406 229.177032,401.942596 230.467407,400.252380   C248.094238,404.802917 263.861969,412.428436 275.445160,426.652557   C289.986633,444.509430 288.824097,466.032166 272.859924,482.627472   C258.943542,497.094025 241.176743,504.261047 222.172012,508.891846   C216.044418,510.384888 209.773209,511.288605 203.283844,512.730957   C188.645767,513.000000 174.291550,513.000000 159.468658,513.000000  z"/>
+<path fill="#C75344" opacity="1.000000" stroke="none" d=" M293.002380,156.047485   C297.085114,187.479858 289.641449,215.574631 270.177368,239.849609   C249.798935,265.264923 223.045380,279.237122 190.158127,281.077820   C162.885239,282.604309 138.426788,275.198456 116.898178,258.562164   C92.839470,239.970718 78.617706,215.487991 74.910469,185.228073   C70.483353,149.092300 81.579361,117.971344 107.237411,92.523338   C125.266808,74.641525 147.396057,64.395493 172.940720,61.914566   C208.876083,58.424496 239.251373,70.283638 264.094025,95.843781   C280.164185,112.378098 289.692078,132.616287 293.002380,156.047485  M255.983917,105.524902   C231.510956,79.926598 201.534897,69.244797 166.811401,75.441277   C113.327461,84.985619 79.240021,134.365021 87.887566,187.921860   C97.000267,244.359528 154.818542,281.033875 210.062057,265.417633   C280.052032,245.632858 304.489319,161.705826 255.983917,105.524902  z"/>
+<path fill="#FAFAF9" opacity="1.000000" stroke="none" d=" M256.225342,105.785492   C304.489319,161.705826 280.052032,245.632858 210.062057,265.417633   C154.818542,281.033875 97.000267,244.359528 87.887566,187.921860   C79.240021,134.365021 113.327461,84.985619 166.811401,75.441277   C201.534897,69.244797 231.510956,79.926598 256.225342,105.785492  z"/>
+</svg>
